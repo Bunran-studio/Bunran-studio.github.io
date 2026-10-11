@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ジャンプ太郎 ～時代をこえる大冒険～ | 文嵐スタジオ</title>
+<meta name="description" content="いろんな場所と時代を、ジャンプで大冒険！かわいいドット絵の横スクロールアクション。ブラウザで体験版が遊べます。">
+<meta property="og:title" content="ジャンプ太郎 ～時代をこえる大冒険～">
+<meta property="og:description" content="いろんな場所と時代を、ジャンプで大冒険！ブラウザで体験版が遊べます。">
+<meta property="og:image" content="img/feature.png">
+<link rel="icon" href="img/icon.png">
+<link rel="stylesheet" href="fonts/dotgothic16.css">
+<style>
+:root { --cream:#fff8ea; --ink:#3b2f4a; --sub:#7a6e88; --pink:#ff7eb3; --yellow:#ffd43b; --mint:#63e6be; --sky2:#cdeeff; }
+* { box-sizing:border-box; }
+body { word-break:auto-phrase; margin:0; background:var(--cream); color:var(--ink); font-family:'DotGothic16',system-ui,sans-serif; line-height:1.8; overflow-x:hidden; }
+a { color:inherit; }
+.wrap { max-width:960px; margin:0 auto; padding-left:16px; padding-right:16px; }
+
+header { position:sticky; top:0; z-index:10; background:#fffc; backdrop-filter:blur(6px); border-bottom:3px solid var(--ink); }
+.nav { display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:10px; padding-bottom:10px; }
+.back { text-decoration:none; font-size:14px; padding:4px 12px; border:2px solid var(--ink); border-radius:99px; background:#fff; box-shadow:2px 2px 0 var(--ink); }
+.logo { display:flex; align-items:center; gap:8px; text-decoration:none; font-size:15px; }
+.mark { width:32px; height:32px; border:3px solid var(--ink); border-radius:10px; background:var(--yellow); display:grid; place-items:center; font-size:18px; box-shadow:2px 2px 0 var(--ink); transform:rotate(-6deg); }
+
+/* 上：ゲームの絵 */
+.hero { background:linear-gradient(#8fd3ff,#ffe3ef); padding:28px 0 40px; border-bottom:3px solid var(--ink); }
+.feature { display:block; width:100%; border:3px solid var(--ink); border-radius:20px; box-shadow:6px 6px 0 var(--ink); image-rendering:pixelated; }
+
+/* アプリのカード */
+.app { position:relative; display:grid; grid-template-columns:140px 1fr; gap:22px; align-items:center; background:#fff; border:3px solid var(--ink); border-radius:24px; padding:22px; box-shadow:6px 6px 0 var(--ink); margin-top:34px; }
+.app .new { position:absolute; top:-16px; right:18px; background:var(--pink); color:#fff; border:3px solid var(--ink); border-radius:99px; padding:0 12px; font-size:14px; box-shadow:2px 2px 0 var(--ink); transform:rotate(4deg); }
+.app .icon { width:140px; height:140px; border:3px solid var(--ink); border-radius:28px; image-rendering:pixelated; box-shadow:4px 4px 0 var(--ink); animation:hop 1.1s cubic-bezier(.3,.7,.4,1) infinite; }
+@keyframes hop { 0%,100% { transform:translateY(0) scale(1.05,.95); } 45% { transform:translateY(-12px) scale(.97,1.03); } }
+.app h1 { margin:0; font-size:26px; line-height:1.4; }
+.tag { display:inline-block; font-size:12px; border:2px solid var(--ink); border-radius:99px; padding:0 10px; margin:4px 6px 0 0; background:var(--sky2); }
+.tag:nth-child(2) { background:#ffe3ef; } .tag:nth-child(3) { background:#d3f9d8; }
+.app p { margin:10px 0 14px; }
+.btns { display:flex; flex-wrap:wrap; gap:12px; }
+.btn { display:inline-block; padding:10px 20px; border:3px solid var(--ink); border-radius:16px; text-decoration:none; font-size:16px; box-shadow:4px 4px 0 var(--ink); transition:transform .1s, box-shadow .1s; }
+.btn:hover { transform:translate(-2px,-2px); box-shadow:6px 6px 0 var(--ink); }
+.btn:active { transform:translate(3px,3px); box-shadow:1px 1px 0 var(--ink); }
+.btn.y { background:var(--yellow); } .btn.p { background:var(--pink); color:#fff; } .btn.m { background:var(--mint); }
+.note { margin:10px 0 0; font-size:13px; color:var(--sub); }
+
+/* 見出し */
+section { padding-top:48px; }
+.h2 { margin:0 0 20px; }
+.h2 h2 { margin:0; font-size:24px; display:inline-block; padding:2px 18px; border:3px solid var(--ink); border-radius:14px; box-shadow:4px 4px 0 var(--ink); transform:rotate(-2deg); background:var(--yellow); }
+#shots .h2 h2 { background:var(--pink); color:#fff; text-shadow:2px 2px 0 var(--ink); }
+#how .h2 h2 { background:var(--mint); }
+
+.points { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+.point { background:#fff; border:3px solid var(--ink); border-radius:18px; padding:14px 16px; box-shadow:4px 4px 0 var(--ink); }
+.point b { display:block; font-size:17px; }
+.point span { font-size:14px; color:var(--sub); }
+
+.shots { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+.shots img { width:100%; border:3px solid var(--ink); border-radius:12px; image-rendering:pixelated; box-shadow:4px 4px 0 var(--ink); }
+
+.box { background:#fff; border:3px solid var(--ink); border-radius:20px; padding:18px 20px; box-shadow:5px 5px 0 var(--ink); }
+.box ul { margin:0; padding-left:1.2em; }
+.center { text-align:center; margin-top:28px; }
+
+footer { margin-top:56px; background:var(--ink); color:#fff; text-align:center; padding:24px 16px 28px; font-size:13px; }
+footer a { color:#fff; }
+
+@media (max-width:640px) {
+  .app { grid-template-columns:1fr; text-align:center; padding:22px 16px; }
+  .app .icon { margin:0 auto; width:110px; height:110px; }
+  .app h1 { font-size:22px; }
+  .btns { justify-content:center; }
+  .shots { grid-template-columns:1fr; }
+}
+@media (prefers-reduced-motion:reduce) { * { animation:none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap nav">
+    <a class="back" href="../index.html">◀ 文嵐スタジオ</a>
+    <a class="logo" href="../index.html"><span class="mark">嵐</span>Bunran studio</a>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <img class="feature" src="img/feature.png" alt="ジャンプ太郎 いろんな場所と時代を、ジャンプで大冒険！">
+  </div>
+</div>
+
+<main class="wrap">
+  <article class="app">
+    <span class="new">NEW!</span>
+    <img class="icon" src="img/icon.png" alt="ジャンプ太郎のアイコン">
+    <div>
+      <h1>ジャンプ太郎<br>～時代をこえる大冒険～</h1>
+      <div><span class="tag">アクション</span><span class="tag">ドット絵</span><span class="tag">Android</span></div>
+      <p>いろんな場所と時代を、ジャンプで大冒険！桜の町、縄文時代、恐竜の時代、江戸の町…かわいいドット絵の横スクロールアクションです。</p>
+      <div class="btns">
+        <a class="btn y" href="game.html">▶ 体験版であそぶ（無料）</a>
+        <a class="btn p" href="https://play.google.com/store/apps/details?id=com.bunran.jumptaro" target="_blank" rel="noopener">Google Play でアプリを入れる</a>
+      </div>
+      <p class="note">体験版はワールド1（5ステージ）まで。アプリなら全25ステージ＋ボス5体！<br>Jump Taro: Leap Through Time — a cute pixel-art platformer.</p>
+    </div>
+  </article>
+
+  <section id="points">
+    <div class="h2"><h2>どんなゲーム？</h2></div>
+    <div class="points">
+      <div class="point"><b>🌸 場所と時代をめぐる</b><span>桜の町、縄文時代、海、恐竜の時代、江戸の町…ステージごとに景色がかわる</span></div>
+      <div class="point"><b>🍡 ごちそうを集めよう</b><span>金平糖とおだんごを集めて、各ステージの「ごちそう」をずかんに登録</span></div>
+      <div class="point"><b>🐱 ひみつがいっぱい</b><span>かくれた招き猫、ひみつのルート、ニセ鳥居のワナ</span></div>
+      <div class="point"><b>👹 ボスとたたかう</b><span>ワールドの最後には、大ガマや鬼などのボスが待っている</span></div>
+      <div class="point"><b>⭐ 4つの難しさ</b><span>イージーから鬼モードまで。はじめての人も、うまい人も楽しめる</span></div>
+      <div class="point"><b>🧒 キャラをえらべる</b><span>太郎・うさ丸・ねこ丸。キャラによって行けるルートがちがう</span></div>
+    </div>
+  </section>
+
+  <section id="shots">
+    <div class="h2"><h2>ゲーム画面</h2></div>
+    <div class="shots">
+      <img src="img/ss1.png" alt="桜のステージ"><img src="img/ss2.png" alt="縄文のステージ"><img src="img/ss3.png" alt="ひみつのルート">
+      <img src="img/ss4.png" alt="ボス戦"><img src="img/ss5.png" alt="海のステージ"><img src="img/ss6.png" alt="ネオンの町のステージ">
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="h2"><h2>あそびかた</h2></div>
+    <div class="box">
+      <ul>
+        <li>スマホ：画面の ◀ ▶ でいどう、▲ でジャンプ、🔥 でショット</li>
+        <li>パソコン：← → / A D でいどう、スペースでジャンプ、X でショット、P でポーズ</li>
+        <li>敵は上からふんでたおそう。続けてふむと金平糖がどんどん増える！</li>
+      </ul>
+    </div>
+    <div class="center"><a class="btn y" href="game.html">▶ 体験版であそぶ</a></div>
+  </section>
+</main>
+
+<footer>
+  <a href="privacy.html">プライバシーポリシー</a>　｜　<a href="terms.html">利用規約</a>　｜　<a href="privacy-en.html">Privacy Policy</a>　｜　<a href="terms-en.html">Terms</a>　｜　<a href="https://forms.gle/DzApiYNY5XGHRijs6" target="_blank" rel="noopener">お問い合わせ</a><br>
+  <a href="../index.html">文嵐スタジオ（Bunran studio）</a>　© 文嵐（Bunran）
+</footer>
+</body>
+</html>
