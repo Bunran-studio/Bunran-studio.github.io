@@ -31,6 +31,8 @@
 .rc img{width:40px;height:40px;image-rendering:pixelated}.rc .rbig{font-size:30px;line-height:40px}.rc small{font-size:clamp(11px,1.8vw,14px)}
 .rc.on{border-color:#ffd43b;background:#ffd43b33;transform:scale(1.08)}.rc.win{border-color:#ff8787;background:#ff878740;animation:rwin .5s ease-in-out 3}
 @keyframes rwin{50%{transform:scale(1.18)}}
+.oni-pill{letter-spacing:-2px;white-space:nowrap}.oni-pill .oni{display:inline-block}.oni-pill .oni.off{opacity:.25;filter:grayscale(1)}.oni-pill .onit{letter-spacing:0;font-size:.8em;margin-left:4px}
+.btn.goal{font-size:.85em}.btn.goal.on{background:#ffd43b;color:#3b2f4a}
 .toast{position:fixed;left:50%;bottom:18%;transform:translateX(-50%);background:#000c;color:#fff;padding:10px 18px;border-radius:12px;z-index:99;font-size:clamp(13px,2.4vw,18px)}
 a.btn{display:inline-block;text-decoration:none}
 .btn.sub{background:#dee2e6}
@@ -820,6 +822,46 @@ if (!save.sePick) save.sePick = {};
 for (const [k, v] of [['items', { mallet: 0, magnet: 0, geta: 0 }], ['bring', {}], ['skins', { normal: 1 }], ['seen', {}], ['bossWin', {}], ['wclaim', {}]]) if (!save[k]) save[k] = v;
 if (!save.skin || !save.skins[save.skin]) save.skin = 'normal';
 
+/* ---------- おにぎり（挑戦するたびに1こ使う。15分で1こ回復。クリアしたらもどってくる） ---------- */
+const ONI_MS = 15 * 60 * 1000, FREE_STAGES = 5;            // ワールド1（5ステージ）はおにぎりを使わない
+const STAMINA_ON = WEB_BUILD !== 'crazy';                   // CrazyGames 版はなし
+const oniMax = () => (SHOP_ON && save.noAds ? 8 : 5);       // 広告なしパックの人は最大8こ
+function oniNow() {        // 時間でふえた分を足して、いまの数を返す
+  const now = Date.now(), max = oniMax();
+  if (save.oni === undefined) { save.oni = max; save.oniT = now; }
+  if (save.oni >= max) { save.oniT = now; return save.oni; }
+  const k = Math.floor((now - save.oniT) / ONI_MS);
+  if (k > 0) { save.oni = Math.min(max, save.oni + k); save.oniT += k * ONI_MS; if (save.oni >= max) save.oniT = now; }
+  return save.oni;
+}
+const oniLeft = () => Math.max(0, ONI_MS - (Date.now() - save.oniT));    // つぎの1こまでの時間
+const mmss = ms => { const t = Math.ceil(ms / 1000); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+// おにぎりを絵でならべる（ある分は色つき、ない分はうすく）。満タンでなければ、つぎの回復までの時間も
+function oniText() { const n = oniNow(), max = oniMax(); let h = ''; for (let k = 0; k < max; k++) h += '<span class="oni' + (k < n ? '' : ' off') + '">🍙</span>'; return h + (n < max ? ' <small class="onit">' + tx('あと {0}', mmss(oniLeft())) + '</small>' : ''); }
+function oniGive(n) { oniNow(); const max = oniMax(); save.oni = Math.min(max, save.oni + n); if (save.oni >= max) save.oniT = Date.now(); persist(); }
+// メニューのおにぎり表示を毎秒こうしん
+setInterval(() => { document.querySelectorAll('.oni-pill').forEach(e => { e.innerHTML = oniText(); }); const w = document.getElementById('oniWait'); if (w) { if (oniNow() > 0 && w.dataset.go) { const go = w.dataset.go; w.removeAttribute('data-go'); window[go] && window[go](); } else w.textContent = tx('つぎの1こまで あと {0}', mmss(oniLeft())); } }, 1000);
+// ステージをはじめる（おにぎりを1こ使う）。足りないときは「おにぎりがない」画面へ
+function play(i, d) {
+  if (!STAMINA_ON || i < FREE_STAGES) return startStage(i, d);
+  if (oniNow() <= 0) return showOni(i, d);
+  if (save.oni >= oniMax()) save.oniT = Date.now();
+  save.oni--; persist();
+  startStage(i, d); G.paid = true;
+  if (!save.oniTip) { save.oniTip = 1; persist(); texts.push({ x: p.x + 12, y: p.y - 40, s: tx('🍙 おにぎりを1こ使ったよ。クリアするともどってくるよ！'), col: '#ffe066', life: 300 }); }   // はじめて使ったときだけ
+}
+function showOni(i, d) {
+  window.__oniGo = () => play(i, d);   // 待っていて1こ回復したら、そのまま始める
+  showOv(`<div class="scr"><h2>${tx('🍙 おにぎりがありません')}</h2>
+    <p>${tx('ステージに挑戦するには、おにぎりが1こいるよ。')}<br><span class="small">${tx('おにぎりは15分で1こ回復。クリアすれば、使ったおにぎりはもどってくるよ！')}</span></p>
+    <p class="new" id="oniWait" data-go="__oniGo">${tx('つぎの1こまで あと {0}', mmss(oniLeft()))}</p>
+    <button class="btn" id="oniAd">${noAdsNow() ? '✨ ' + tx('おにぎりを満タンにする') : tx('📺 広告を見て') + ' ' + tx('おにぎりを満タンにする')}</button>
+    <div class="row"><button class="btn sub" id="oniBuy" ${save.coins < 100 ? 'disabled' : ''}>${tx('🍬 おやつ100で1こ（いま {0}）', save.coins)}</button><button class="btn sub" id="back">${tx('もどる')}</button></div></div>`);
+  $('oniAd').onclick = () => Ads.rewarded(() => { oniGive(oniMax()); sfx.secret(); play(i, d); }, tx('おにぎりを満タンにする'));
+  $('oniBuy').onclick = () => { if (save.coins < 100) return; save.coins -= 100; oniGive(1); sfx.coin(); play(i, d); };
+  $('back').onclick = showStages;
+}
+
 /* ================= ことば（日本語 / English） ================= */
 // 端末の言語が日本語以外なら英語。タイトルの🌐ボタンで切りかえられる
 const LANG = save.lang || ((navigator.language || 'ja').toLowerCase().startsWith('ja') ? 'ja' : 'en');
@@ -868,6 +910,34 @@ const I18N = {
   'ルーレットをまわす！': 'Spin the wheel!',
   '{0} をゲット！': 'You got {0}!',
   'やった！': 'Yay!',
+  'ショット': 'SHOT',
+  '🍙 おにぎりを1こ使ったよ。クリアするともどってくるよ！': '🍙 Used 1 rice ball. Clear the stage to get it back!',
+  '🎯{0} 買えるよ！': '🎯{0}: you can buy it!',
+  '🎯{0}まで あと{1}': '🎯{1} more for {0}',
+  '🎯 目標にしている': '🎯 Current goal',
+  '🎯 目標にする': '🎯 Set as goal',
+  'のこり': 'LIVES',
+  '発': '',
+  '❤ ハートとおにぎり': '❤ Hearts & rice balls',
+  'ハート：体力。敵やトゲに当たると減って、0になるとミス': 'Hearts: your health. You lose one when hit; at 0 you miss',
+  '残りの人数。ミスすると1つ減る。0になるとゲームオーバー': 'Lives left. A miss costs one; at 0 it is game over',
+  'おにぎり：ステージに挑戦するたびに1こ使う。15分で1こ回復。クリアすればもどってくる（ワールド1は使わない）': 'Rice balls: each try costs one. You get one back every 15 minutes, and clearing returns it (World 1 is free)',
+  '上からふんでたおす。着地せずに続けてふむと、金平糖がどんどん増える！': 'Stomp them from above. Keep bouncing without landing for more candy!',
+  '🎁 ごほうび': '🎁 Rewards',
+  '3ステージクリアするごとに、ルーレットでおやつやアイテムがもらえる': 'Every 3 clears, spin the wheel for snacks or items',
+  '毎日のログインボーナスで、おやつとおにぎりがもらえる': 'Daily login bonus gives snacks and rice balls',
+  'アイテムは、アイテム画面で「つぎのステージにもっていく」にすると使える': 'Items work when set to "bring to next stage" on the item screen',
+  '（つぎのステージで使えるよ）': '(ready for your next stage)',
+  'あと {0}': 'next in {0}',
+  'つぎの1こまで あと {0}': 'Next rice ball in {0}',
+  '🍙 おにぎりがありません': '🍙 Out of rice balls',
+  'ステージに挑戦するには、おにぎりが1こいるよ。': 'You need 1 rice ball to try a stage.',
+  'おにぎりは15分で1こ回復。クリアすれば、使ったおにぎりはもどってくるよ！': 'You get 1 back every 15 minutes, and clearing a stage gives your rice ball back!',
+  'おにぎりを満タンにする': 'Refill rice balls',
+  '🍬 おやつ100で1こ（いま {0}）': '🍬 1 for 100 snacks (you have {0})',
+  '🍙 クリアしたので、おにぎりがもどってきた！': '🍙 Stage cleared, your rice ball came back!',
+  'ワールド1はおにぎりなしで遊べるよ': 'World 1 is free to play',
+  '🍙 おにぎりも2こプレゼント！': '🍙 Plus 2 rice balls!',
   'もう1回まわす': 'spin again',
   '{0}れんぞく！ +{1}': '{0} combo! +{1}',
   '🏠 タイトルへ': '🏠 Title',
@@ -1373,12 +1443,14 @@ function moveTile(e, isP) {
 
 function pop(x, y, n, col) { for (let i = 0; i < n; i++) particles.push({ x, y, vx: (Math.random() - .5) * 6, vy: -Math.random() * 6 - 2, life: 40, col }); }
 function say(x, y, s, col = '#fff') { texts.push({ x, y, s, col, life: 70 }); }
-function addCoin() { G.coins++; sfx.coin(); gainKi(1); }
+function addCoin(x, y) { G.coins++; sfx.coin(); gainKi(1); if (x !== undefined) flySnack(x, y, 1, KONPEITO[0]); }
+// 拾ったおやつが、画面の上のおやつ表示に飛んでいく（着いたら数字が増えて、ぴょこっとはねる）
+function flySnack(wx, wy, v, img) { (G.fly || (G.fly = [])).push({ x: wx - cam, y: wy, f0: frame, v, img }); }
 // 敵をふむと金平糖。着地せずに続けてふむと 1→2→4→8 こ
 function stompReward(e) {
   G.combo = (G.combo || 0) + 1;
   const n = Math.min(8, 1 << (G.combo - 1));
-  G.coins += n; gainKi(n);
+  G.coins += n; gainKi(n); flySnack(e.x + e.w / 2, e.y, n, KONPEITO[0]);
   pop(e.x + e.w / 2, e.y, 6 + n * 2, '#ffd43b');
   say(e.x + e.w / 2, e.y - 6, G.combo > 1 ? tx('{0}れんぞく！ +{1}', G.combo, n) : '+' + n, G.combo > 1 ? '#ffd43b' : '#fff');
 }
@@ -1409,18 +1481,18 @@ function updatePShots() {
   G.pshots = G.pshots.filter(s => !s.dead);
 }
 
-function hitBlock(tx, ty) {
-  const c = L.g[ty][tx];
-  if (c === '?' && hash(tx, ty, 42) < 0.22) {     // ときどきパワーアップアイテムが出る
-    L.g[ty][tx] = '!'; sfx.cp();
-    L.items.push({ kind: ITEM_KEYS[hash(tx, ty, 43) * ITEM_KEYS.length | 0], x: tx * T + 4, y: ty * T - 26, w: 24, h: 24, vx: 1.2, vy: -6 });
+function hitBlock(bx, by) {   // bx, by：ブロックのマス目（tx は「ことば」の関数なので使わない）
+  const c = L.g[by][bx];
+  if (c === '?' && hash(bx, by, 42) < 0.22) {     // ときどきパワーアップアイテムが出る
+    L.g[by][bx] = '!'; sfx.cp();
+    L.items.push({ kind: ITEM_KEYS[hash(bx, by, 43) * ITEM_KEYS.length | 0], x: bx * T + 4, y: by * T - 26, w: 24, h: 24, vx: 1.2, vy: -6 });
   } else if (c === '?' || c === 'H') {
-    L.g[ty][tx] = '!'; G.dango++; sfx.dango(); gainKi(3);
-    particles.push({ x: tx * T + 16, y: ty * T - 4, vx: 0, vy: -4, life: 30, col: '#ffd60a', coin: true });
-    if (c === 'H') say(tx * T + 16, ty * T - 10, tx('かくしブロック！'), '#ffd43b');
+    L.g[by][bx] = '!'; G.dango++; sfx.dango(); gainKi(3); flySnack(bx * T + 16, by * T - 8, 5, DANGO);
+    particles.push({ x: bx * T + 16, y: by * T - 4, vx: 0, vy: -4, life: 30, col: '#ffd60a', coin: true });
+    if (c === 'H') say(bx * T + 16, by * T - 10, tx('かくしブロック！'), '#ffd43b');
   } else if (c === 'B') {
-    L.g[ty][tx] = ' '; sfx.brk(); pop(tx * T + 16, ty * T + 16, 8, '#c8742b');
-    L.en.forEach(e => { if (e.alive && Math.abs(e.x + e.w / 2 - (tx * T + 16)) < 26 && Math.abs(e.y + e.h - ty * T) < 6) { e.alive = false; e.squish = 1; } });
+    L.g[by][bx] = ' '; sfx.brk(); pop(bx * T + 16, by * T + 16, 8, '#c8742b');
+    L.en.forEach(e => { if (e.alive && Math.abs(e.x + e.w / 2 - (bx * T + 16)) < 26 && Math.abs(e.y + e.h - by * T) < 6) { e.alive = false; e.squish = 1; } });
   } else sfx.bump();
 }
 
@@ -1693,7 +1765,7 @@ function update() {
     const ddx = p.x + 3 - c.x, ddy = p.y + 4 - c.y;
     if (!G.got.has(c.id) && ddx * ddx + ddy * ddy < 170 * 170) { c.x += ddx * 0.14; c.y += ddy * 0.14; }
   }
-  for (const c of L.coins) if (!G.got.has(c.id) && hit(p, { x: c.x, y: c.y, w: 16, h: 16 })) { G.got.add(c.id); addCoin(); }
+  for (const c of L.coins) if (!G.got.has(c.id) && hit(p, { x: c.x, y: c.y, w: 16, h: 16 })) { G.got.add(c.id); addCoin(c.x + 8, c.y + 8); }
   for (const it of L.items) {
     if (it.got) continue;
     it.vy = Math.min(it.vy + 0.4, 8); const m = moveTile(it, false);
@@ -1721,7 +1793,7 @@ function update() {
       if (p.y > 9 * T + 4 && Math.abs(p.x + p.w / 2 - (f.x * T + 16)) < 3 * T) f.fell = true;
       if (p.x > (f.x + 3) * T && !p.dead) {
         f.judged = true;
-        if (!f.fell && G.deaths === f.deaths) { G.coins += 20; sfx.secret(); say(p.x + 12, p.y - 20, tx('見ぬいた！ おやつ+20'), '#69db7c'); }
+        if (!f.fell && G.deaths === f.deaths) { G.coins += 20; flySnack(p.x + 12, p.y, 20, KONPEITO[0]); sfx.secret(); say(p.x + 12, p.y - 20, tx('見ぬいた！ おやつ+20'), '#69db7c'); }
       }
     }
   }
@@ -1922,10 +1994,10 @@ function showLogin() {
     <b>${tx('{0}日目', k + 1)}</b><span>${k === 6 ? '🎁' : '🍬'} ${r}</span>${k + 1 < day ? '<i>✓</i>' : ''}</div>`).join('');
   showOv(`<div class="scr"><h2>${tx('ログインボーナス')}</h2><p>${tx('{0}日目！ おやつ {1} をプレゼント', day, gift)}</p>
     <div class="days">${cells}</div>
-    <p class="small">${tx('毎日あそぶと、7日目に大きなごほうび！1日あくと1日目にもどるよ')}</p>
+    <p class="small">${tx('毎日あそぶと、7日目に大きなごほうび！1日あくと1日目にもどるよ')}${STAMINA_ON ? '<br>' + tx('🍙 おにぎりも2こプレゼント！') : ''}</p>
     <div class="row"><button class="btn" id="dbl">${noAdsNow() ? '✨' : tx('📺 広告を見て')} ${tx('2倍もらう（{0}）', gift * 2)}</button><button class="btn sub" id="get">${tx('受け取る（{0}）', gift)}</button></div></div>`);
   const claim = mult => {
-    save.coins += gift * mult; save.lastLogin = dayStr(new Date()); save.loginStreak = day; persist(); sfx.secret();
+    save.coins += gift * mult; save.lastLogin = dayStr(new Date()); save.loginStreak = day; if (STAMINA_ON) oniGive(2); persist(); sfx.secret();
     showTitle(tx('ログインボーナス：おやつ +{0}', gift * mult) + (mult > 1 ? tx('（2倍！）') : ''));
   };
   $('get').onclick = () => claim(1);
@@ -1937,7 +2009,7 @@ function showTitle(msg) {
   toMenu();
   if (save.lastLogin !== dayStr(new Date())) { showLogin(); return; }
   const bookBadge = WORLDS.some((w, wi) => !save.wclaim[wi] && worldSkin(wi) && worldDone(w));
-  showOv(`<div class="topbar"><span class="pill">🍬 ${save.coins}</span><span class="sp"></span>
+  showOv(`<div class="topbar"><span class="pill">🍬 ${save.coins}</span>${STAMINA_ON ? `<span class="pill oni-pill">${oniText()}</span>` : ''}<span class="sp"></span>
       ${SHOP_ON ? `<button class="ico" id="shop">🛒<small>${tx('ショップ')}</small>${noAdsNow() ? '' : '<i class="badge">!</i>'}</button>` : ''}
       <button class="ico" id="set">⚙️<small>${tx('せってい')}</small></button></div>
     <div class="scr title">
@@ -2008,10 +2080,14 @@ function showHowto(pg = 0, after) {     // あそびかた（ページめくり�
     [tx('🎮 そうさ'), [['◀ ▶', tx('左右にいどう')], ['▲', tx('ジャンプ（長おしで高くとぶ）')], ['🔥', tx('こんぺいとうショット（金平糖10こで1発たまる）')], ['⏸', tx('右上のボタンでポーズ')]]],
     [tx('🍬 あつめるもの'), [[im(KONPEITO[0]), tx('金平糖：おやつ+1。10こでショットが1発たまる')], [im(DANGO), tx('だんご：宝箱から出る。おやつ+5')],
       [im(FOODS.takoyaki.spr), tx('ごちそう：各ステージに1つ。ずかんに登録される')], [im(NEKO), tx('招き猫：1UP＋ごりやく！近づくと鳴く。ぜんぶ集めるとごほうび')]]],
-    [tx('👾 てき'), [[im(EN_SPR.w[0]), tx('上からふんでたおす')], [im(EN_SPR.n[0]), tx('トゲトゲの敵はふめない！ショットでたおそう')],
+    [tx('❤ ハートとおにぎり'), [[im(HEART[0]), tx('ハート：体力。敵やトゲに当たると減って、0になるとミス')], ['×5', tx('残りの人数。ミスすると1つ減る。0になるとゲームオーバー')],
+      ['🍙', tx('おにぎり：ステージに挑戦するたびに1こ使う。15分で1こ回復。クリアすればもどってくる（ワールド1は使わない）')]]],
+    [tx('👾 てき'), [[im(EN_SPR.w[0]), tx('上からふんでたおす。着地せずに続けてふむと、金平糖がどんどん増える！')], [im(EN_SPR.n[0]), tx('トゲトゲの敵はふめない！ショットでたおそう')],
       [im(BOSS_SPR.gama[0]), tx('ボス：動きを見て、スキをついてふもう')]]],
     [tx('⚠️ ワナとひみつ'), [['⛩', tx('ニセ鳥居：しめ縄がないのがニセモノ。見ぬいてとびこえるとボーナス！')], ['🧱', tx('ヒビの入ったかべは、すりぬけられることがある')],
       ['🕳', tx('落ちたと思ったら…ワープすることも！')], ['🪵', tx('乗るとくずれる足場、見えないブロックにも注意')]]],
+    [tx('🎁 ごほうび'), [['🎡', tx('3ステージクリアするごとに、ルーレットでおやつやアイテムがもらえる')], ['📅', tx('毎日のログインボーナスで、おやつとおにぎりがもらえる')],
+      ['🎒', tx('アイテムは、アイテム画面で「つぎのステージにもっていく」にすると使える')]]],
   ];
   const [title, rows] = pages[pg];
   showOv(`<div class="scr"><h2>${tx('❓ あそびかた')}</h2><div class="whead" style="width:min(560px,100%)">${title}</div>
@@ -2140,7 +2216,7 @@ function showSkins() {
     const own = save.skins[k];
     let how = '';
     if (!own) {
-      if (s.get === 'snack') how = `<button class="btn mini" data-buyskin="${k}" ${save.coins < s.cost ? 'disabled' : ''}>${tx('おやつ {0} で解放', s.cost)}</button>`;
+      if (s.get === 'snack') how = `<button class="btn mini" data-buyskin="${k}" ${save.coins < s.cost ? 'disabled' : ''}>${tx('おやつ {0} で解放', s.cost)}</button>${goalBtn('s' + k)}`;
       else if (s.get === 'neko') how = `<small>${tx('招き猫をぜんぶ集めると手に入る')}</small>`;
       else if (s.get === 'pack') how = `<button class="btn mini" data-shop="1">${tx('🚫 広告なしパックの特典')}</button>`;
       else how = `<small>${tx('{0}の図鑑コンプで手に入る', WORLDS[+s.get.slice(1)].name)}</small>`;
@@ -2155,6 +2231,7 @@ function showSkins() {
     if (!save.skins[k]) return;
     save.skin = k; persist(); showSkins();
   });
+  bindGoal(showSkins);
   ov.querySelectorAll('[data-buyskin]').forEach(b => b.onclick = () => {
     const k = b.dataset.buyskin;
     if (save.coins < SKINS[k].cost) return;
@@ -2168,12 +2245,13 @@ function showItems(back) {
     const it = ITEMS[k], n = save.items[k] || 0;
     return `<div class="card" style="cursor:default"><img src="${sprURL(ITEM_SPR[k])}" class="skimg"><b>${it.name}</b><small>${it.desc}</small>
       <div class="stat">${tx('もっている数')}<span>${n}</span></div>
-      <button class="btn mini" data-buyitem="${k}" ${save.coins < it.price ? 'disabled' : ''}>${tx('おやつ {0} で買う', it.price)}</button>
+      <button class="btn mini" data-buyitem="${k}" ${save.coins < it.price ? 'disabled' : ''}>${tx('おやつ {0} で買う', it.price)}</button>${goalBtn('i' + k)}
       <label class="bring"><input type="checkbox" data-bring="${k}" ${save.bring[k] && n > 0 ? 'checked' : ''} ${n > 0 ? '' : 'disabled'}> ${tx('つぎのステージにもっていく')}</label></div>`;
   }).join('');
   showOv(`<div class="scr"><h2>${tx('🎒 アイテム')}</h2><p class="small">${tx('もっているおやつ：{0}', save.coins)}</p>
     <p class="small">${tx('ステージの宝箱からも出るよ。使うとタイム記録はつかない')}</p>
     <div class="cards">${rows}</div><button class="btn sub" id="back">${tx('もどる')}</button></div>`);
+  bindGoal(() => showItems(back));
   ov.querySelectorAll('[data-buyitem]').forEach(b => b.onclick = () => {
     const k = b.dataset.buyitem;
     if (save.coins < ITEMS[k].price) return;
@@ -2192,13 +2270,14 @@ function showChars() {
       <div class="stat">${tx('スピード')}<i>${bar(c.sp)}</i></div><div class="stat">${tx('ジャンプ')}<i>${bar(c.jp)}</i></div>
       <div class="stat">${tx('とくぎ')}<span>${c.skill}</span></div><small>${c.desc}</small>
       ${own ? '' : c.exclusive ? `<button class="btn mini" data-shop="1">${tx('🚫 広告なしパックの特典')}</button>`
-        : `<button class="btn mini" data-buy="${i}" ${save.coins < c.cost ? 'disabled' : ''}>${tx('おやつ {0} で解放', c.cost)}</button>
+        : `<button class="btn mini" data-buy="${i}" ${save.coins < c.cost ? 'disabled' : ''}>${tx('おやつ {0} で解放', c.cost)}</button>${goalBtn('c' + i)}
         <button class="btn mini sub" data-ad="${i}">${noAdsNow() ? tx('✨ すぐに解放') : tx('📺 広告を見て解放')}</button>`}</div>`;
   }).join('');
   showOv(`<div class="scr"><h2>${tx('キャラをえらぼう')}</h2><p class="small">${tx('もっているおやつ：{0}（金平糖1こ＝1、だんご1本＝5）', save.coins)}</p>
     <div class="cards">${cards}</div>
     <p class="small">${tx('キャラによって行けるひみつルートがちがうよ')}</p>
     <div class="row"><button class="btn sub" id="back">${tx('もどる')}</button><button class="btn sub" id="skin">${tx('👕 きせかえ')}</button><button class="btn" id="ok">${tx('けってい')}</button></div></div>`);
+  bindGoal(showChars);
   CHARS.forEach((c, i) => { if (!$('cc' + i)) return; const x = $('cc' + i).getContext('2d'); x.drawImage(charSpr(i, save.skin).stand[0], 0, 0); });
   ov.querySelectorAll('.card').forEach(el => el.onclick = e => {
     if (e.target.closest('button')) return;
@@ -2235,11 +2314,11 @@ function showStages() {
   };
   const btns = WORLDS.map(w => `<div class="whead">${w.name}</div>` + STAGES.slice(w.from, w.to + 1).map((s, j) => stBtn(s, w.from + j)).join('')).join('')
     + `<div class="whead soon">🔜 ${tx('つぎのワールドは、アップデートで追加予定！')}</div>`;
-  showOv(`<div class="scr"><h2>${tx('ステージをえらぼう')}</h2><div class="tabs">${tabs}</div><div class="grid">${btns}</div>
+  showOv(`<div class="scr"><h2>${tx('ステージをえらぼう')}</h2>${STAMINA_ON ? `<p><span class="pill oni-pill">${oniText()}</span> <span class="small">${tx('ワールド1はおにぎりなしで遊べるよ')}</span></p>` : ''}<div class="tabs">${tabs}</div><div class="grid">${btns}</div>
     <p class="small">${tx('鬼モードはハードをクリアしたステージで解放 ／ タイムはノーミスのときだけ記録')}</p>
     <div class="row"><button class="btn sub" id="itm">${tx('🎒 アイテム')}</button><button class="btn sub" id="chr">${tx('キャラ：{0}', CHARS[save.char].name)}</button><button class="btn sub" id="ttl">${tx('タイトル')}</button></div></div>`);
   ov.querySelectorAll('.tab').forEach(b => b.onclick = () => { selDiff = +b.dataset.d; save.diff = selDiff; persist(); showStages(); });
-  ov.querySelectorAll('.st').forEach(b => b.onclick = () => startStage(+b.dataset.i, selDiff));
+  ov.querySelectorAll('.st').forEach(b => b.onclick = () => play(+b.dataset.i, selDiff));
   $('chr').onclick = showChars; $('ttl').onclick = showTitle; $('itm').onclick = () => showItems();
 }
 
@@ -2250,12 +2329,13 @@ function pause() {
     <button class="btn" id="res">${tx('さいかい')}</button><button class="btn sub" id="rt">${tx('さいしょから')}</button><button class="btn sub" id="sel">${tx('ステージ選択へ')}</button><button class="btn sub" id="ttl">${tx('🏠 タイトルへ')}</button></div>`);
   $('ttl').onclick = () => showTitle();
   $('res').onclick = () => { screen = 'play'; hideOv(); Music.duckOn(false); };
-  $('rt').onclick = () => startStage(G.i, G.d);
+  $('rt').onclick = () => play(G.i, G.d);
   $('sel').onclick = showStages;
 }
 
 function finishStage() {
   screen = 'clear';
+  const oniBack = !!G.paid; if (oniBack) { G.paid = false; oniGive(1); }
   const i = G.i, d = G.d, st = stInfo(i);
   const firstClear = !st.clr[d];
   st.clr[d] = 1;
@@ -2283,6 +2363,7 @@ function finishStage() {
         ${tx('タイム')} ${fmt(G.time)} ${newRec ? `<span class="new">${tx('★ベスト更新！')}</span>` : (G.deaths || G.usedItem) ? `<span class="small">${G.deaths ? tx('（ミスありのため記録なし）') : tx('（アイテムを使ったので記録なし）')}</span>` : ''}<br>
         ${tx('金平糖 {0}　だんご {1}　→　おやつ +{2}', G.coins, G.dango, doubled ? earned * 2 : earned)}${doubled ? ` <span class="new">${tx('（2倍！）')}</span>` : ''}<br>
         ${tx('ひみつ')} ${st.sec.length}/${SECRET_TOTAL[i]}　｜　${tx('招き猫')} ${st.neko ? tx('ゲット！') : tx('まだ')}（${nNeko}/${STAGES.length}）　｜　${tx('ごちそう')} ${st.food ? FOODS[STAGES[i].food].name : tx('まだ')}
+        ${oniBack ? `<br><span class="small">${tx('🍙 クリアしたので、おにぎりがもどってきた！')}</span>` : ''}
         ${nekoComp ? `<br><span class="new">${tx('招き猫コンプ！ おやつ+1000＆きせかえ「まねきねこ」')}</span>` : ''}
         ${d === 2 && firstClear ? `<br><span class="new">${tx('鬼モードが解放された！')}</span>` : ''}
       </div>
@@ -2292,8 +2373,8 @@ function finishStage() {
         <button class="btn sub" id="rt">${tx('もういちど')}</button><button class="btn sub" id="sel">${tx('ステージ選択')}</button><button class="btn sub" id="ttl">${tx('🏠 タイトルへ')}</button></div></div>`);
     $('ttl').onclick = () => showTitle();
     if (earned > 0 && !doubled) $('dbl').onclick = () => Ads.rewarded(() => { save.coins += earned; persist(); sfx.secret(); showRes(true); }, tx('おやつ2倍'));
-    if (!last) $('nx').onclick = () => startStage(i + 1, d === 3 && !stInfo(i + 1).clr[2] ? 2 : d);
-    $('rt').onclick = () => startStage(i, d);
+    if (!last) $('nx').onclick = () => play(i + 1, d === 3 && !stInfo(i + 1).clr[2] ? 2 : d);
+    $('rt').onclick = () => play(i, d);
     $('sel').onclick = showStages;
   };
   if (save.clears % AD_CONFIG.interstitialEvery === 0) Ads.interstitial(() => showRoulette(() => showRes(false))); else showRes(false);
@@ -2322,10 +2403,10 @@ function showRoulette(done, again) {   // again: 広告を見てもう1回まわ
       sfx.coin();
       if (n >= steps) {
         const p = ROULETTE[win];
-        if (p.snack) save.coins += p.snack; else save.items[p.item] = (save.items[p.item] || 0) + 1;
+        if (p.snack) save.coins += p.snack; else { save.items[p.item] = (save.items[p.item] || 0) + 1; save.bring[p.item] = true; }   // 当たったアイテムは、つぎのステージに自動でもっていく
         persist(); sfx.secret();
         cells[win].classList.add('win');
-        $('rmsg').textContent = tx('{0} をゲット！', label(p));
+        $('rmsg').textContent = tx('{0} をゲット！', label(p)) + (p.item ? ' ' + tx('（つぎのステージで使えるよ）') : '');
         const b = $('spin'); b.disabled = false; b.textContent = tx('やった！'); b.onclick = done;
         if (!again) {   // リワード広告（自分で選んで見る広告）を見たら、もう1回だけまわせる
           const a = $('again'); a.style.display = '';
@@ -2349,7 +2430,7 @@ function gameOver() {
     <div class="row"><button class="btn sub" id="rt">${tx('さいしょから')}</button><button class="btn sub" id="sel">${tx('ステージ選択')}</button><button class="btn sub" id="ttl">${tx('🏠 タイトルへ')}</button></div></div>`);
   $('ttl').onclick = () => showTitle();
   $('cont').onclick = () => Ads.rewarded(() => { G.lives = DIFFS[G.d].lives; respawn(); screen = 'play'; hideOv(); });
-  $('rt').onclick = () => startStage(G.i, G.d);
+  $('rt').onclick = () => play(G.i, G.d);
   $('sel').onclick = showStages;
 }
 
@@ -3300,29 +3381,84 @@ function draw() {
   if (G && screen !== 'menu') drawHUD();
 }
 
+// 左上のステータスまど（白いまどに黒い二重線。HPバーとショットを文字つきで）
+function goalList() {
+  const g = [];
+  CHARS.forEach((c, i) => { if (!c.exclusive && c.cost) g.push({ key: 'c' + i, name: c.name, cost: c.cost, owned: !!save.chars[i] }); });
+  for (const [k, sk] of Object.entries(SKINS)) if (sk.get === 'snack') g.push({ key: 's' + k, name: sk.name, cost: sk.cost, owned: !!save.skins[k] });
+  for (const k of ITEM_KEYS) g.push({ key: 'i' + k, name: ITEMS[k].name, cost: ITEMS[k].price, owned: false, item: true });
+  return g;
+}
+function curGoal() {
+  if (save.goal === 'none') return null;
+  const g = goalList(), pick = g.find(x => x.key === save.goal && !x.owned);
+  return pick || g.filter(x => !x.owned && !x.item).sort((a, b) => a.cost - b.cost)[0] || null;
+}
+function goalText(total) {
+  const g = curGoal(); if (!g) return '';
+  return total >= g.cost ? tx('🎯{0} 買えるよ！', g.name) : tx('🎯{0}まで あと{1}', g.name, g.cost - total);
+}
+const goalBtn = key => { const on = curGoal() && curGoal().key === key && save.goal === key; return `<button class="btn mini sub goal ${on ? 'on' : ''}" data-goal="${key}">${on ? tx('🎯 目標にしている') : tx('🎯 目標にする')}</button>`; };
+function bindGoal(redraw) { ov.querySelectorAll('[data-goal]').forEach(b => b.onclick = () => { const k = b.dataset.goal; if (save.goal === k) delete save.goal; else save.goal = k; persist(); redraw(); /* もう一度押すと、おまかせ（いちばん安いもの）にもどる */ }); }
+function drawStatusBox(D) {
+  const x = 4, y = 34, w = 196, h = 54, ink = '#202020';
+  ctx.fillStyle = ink; ctx.fillRect(x + 2, y, w - 4, h); ctx.fillRect(x, y + 2, w, h - 4);          // 角を少し丸くした外わく
+  ctx.fillStyle = '#f8f8f0'; ctx.fillRect(x + 3, y + 3, w - 6, h - 6);
+  ctx.fillStyle = ink; ctx.fillRect(x + 5, y + 5, w - 10, 1); ctx.fillRect(x + 5, y + h - 6, w - 10, 1); ctx.fillRect(x + 5, y + 5, 1, h - 10); ctx.fillRect(x + w - 6, y + 5, 1, h - 10);   // 内側の細い線
+  ctx.textAlign = 'left'; ctx.font = `13px ${FONT}`;
+  // 1行目：HP のバーと、のこりの人数
+  const r = clamp(p.hp / D.hp, 0, 1);
+  ctx.fillStyle = '#f0a000'; ctx.fillRect(x + 10, y + 11, 24, 13); ctx.fillStyle = '#fff'; ctx.fillText('HP', x + 13, y + 22);
+  ctx.fillStyle = ink; ctx.fillRect(x + 36, y + 12, 86, 11); ctx.fillStyle = '#e8e8e0'; ctx.fillRect(x + 38, y + 14, 82, 7);
+  ctx.fillStyle = r > 0.5 ? '#38c048' : r > 0.25 ? '#f8c000' : '#f03020'; ctx.fillRect(x + 38, y + 14, 82 * r, 7);
+  ctx.fillStyle = ink; for (let k = 1; k < D.hp; k++) ctx.fillRect(x + 38 + 82 * k / D.hp, y + 14, 1, 7);     // ハートの数ごとの区切り
+  ctx.fillText(`${tx('のこり')}×${G.lives}`, x + 128, y + 22);
+  // 2行目：ショット（たまった数だけ光る）
+  ctx.fillText(tx('ショット'), x + 10, y + 43);
+  const sx = x + (LANG === 'en' ? 52 : 70);
+  for (let k = 0; k < KI_MAX / KI; k++) {
+    const q = clamp((G.ki - k * KI) / KI, 0, 1), cx = sx + k * 22;
+    ctx.fillStyle = ink; ctx.fillRect(cx, y + 31, 18, 15); ctx.fillStyle = '#e8e8e0'; ctx.fillRect(cx + 2, y + 33, 14, 11);
+    ctx.fillStyle = q >= 1 ? (Math.floor(frame / 15) % 2 ? '#ffb000' : '#ff6a00') : '#ffb070'; ctx.fillRect(cx + 2, y + 44 - 11 * q, 14, 11 * q);
+  }
+  ctx.fillStyle = ink; ctx.fillText(`${Math.floor(G.ki / KI)}${tx('発')}`, sx + 70, y + 43);
+}
 function drawHUD() {
   const D = DIFFS[G.d];
   ctx.fillStyle = 'rgba(16,16,36,.75)'; ctx.fillRect(0, 0, VW, 28); ctx.fillStyle = '#000'; ctx.fillRect(0, 28, VW, 2);
   ctx.font = `16px ${FONT}`; ctx.textAlign = 'left';
   ctx.fillStyle = D.col; ctx.fillRect(6, 5, 88, 18); ctx.fillStyle = '#fff'; ctx.fillText(`${G.i + 1} ${D.name}`, 11, 20);
-  for (let k = 0; k < D.hp; k++) ctx.drawImage(HEART[k < p.hp ? 0 : 1], 102 + k * 18, 8, 14, 12);
-  ctx.fillStyle = '#fff'; ctx.fillText(`×${G.lives}`, 104 + D.hp * 18, 20);
-  ctx.drawImage(KONPEITO[0], 182, 3, 22, 22); ctx.fillText(`${G.coins}`, 206, 20);
-  ctx.drawImage(DANGO, 240, 1, 13, 26); ctx.fillText(`${G.dango}`, 256, 20);
-  ctx.fillText(`${tx('ひみつ')} ${G.found.size}/${L.secretTotal}`, 286, 20);
+  ctx.fillStyle = '#fff';
+  // おやつ：飛んでいる分が着いたら増える。飛んでいなければ、実際の数にそろえる
+  const real = G.coins + G.dango * 5;
+  if (G.shown === undefined) G.shown = real - (G.fly || []).reduce((t, fl) => t + fl.v, 0);
+  G.fly = (G.fly || []).filter(fl => {
+    const t = (frame - fl.f0) / 28;
+    if (t >= 1) { G.shown += fl.v; G.bump = 8; return false; }
+    const e = t * t, x = fl.x + (110 - fl.x) * e, y = fl.y + (14 - fl.y) * e - Math.sin(t * Math.PI) * 30;
+    ctx.drawImage(fl.img, x - 9, y - 9, 18, 18 * fl.img.height / fl.img.width);
+    return true;
+  });
+  if (!G.fly.length || G.shown > real) G.shown = real;
+  const bmp = G.bump > 0 ? (G.bump--, G.bump / 8) : 0;
+  ctx.font = `${16 + bmp * 5}px ${FONT}`; ctx.fillText('🍬', 102, 21 - bmp * 3);
+  ctx.font = `16px ${FONT}`; ctx.fillStyle = bmp ? '#ffd43b' : '#fff';
+  const total = save.coins + G.shown, tot = total.toLocaleString();
+  ctx.fillText(tot, 124, 20 - bmp * 3);
+  let gx = 128 + ctx.measureText(tot).width;
+  const gt = goalText(total);
+  if (gt) { ctx.font = `12px ${FONT}`; ctx.fillStyle = total >= curGoal().cost ? '#69db7c' : '#adb5bd'; ctx.fillText(gt, gx, 19, 150); gx += Math.min(150, ctx.measureText(gt).width) + 8; }
+  ctx.font = `16px ${FONT}`; ctx.fillStyle = '#fff';
+  gx = Math.max(gx, 250);
+  ctx.fillText(`${tx('ひみつ')} ${G.found.size}/${L.secretTotal}`, gx, 20); gx += ctx.measureText(`${tx('ひみつ')} ${G.found.size}/${L.secretTotal}`).width + 8;
   const fsp = FOODS[L.foodKey].spr;
-  ctx.globalAlpha = G.food ? 1 : 0.3; ctx.drawImage(fsp, 378, 14 - fsp.height * 0.7, fsp.width * 1.4, fsp.height * 1.4);
-  ctx.globalAlpha = G.neko ? 1 : 0.3; ctx.drawImage(NEKO, 404, 4, 22, 22); ctx.globalAlpha = 1;
-  ctx.fillText(`TIME ${fmt(G.time)}`, 434, 20);
+  ctx.globalAlpha = G.food ? 1 : 0.3; ctx.drawImage(fsp, gx, 14 - fsp.height * 0.7, fsp.width * 1.4, fsp.height * 1.4);
+  ctx.globalAlpha = G.neko ? 1 : 0.3; ctx.drawImage(NEKO, gx + 26, 4, 22, 22); ctx.globalAlpha = 1;
+  ctx.font = `14px ${FONT}`;
+  ctx.fillText(`TIME ${fmt(G.time)}`, gx + 56, 20);
   const best = stInfo(G.i).best[G.d];
-  if (best) { ctx.fillStyle = '#ffd43b'; ctx.fillText(`BEST ${fmt(best)}`, 548, 20); }
-  ctx.fillStyle = 'rgba(16,16,36,.75)'; ctx.fillRect(4, 32, 94, 26);     // ショットのゲージ
-  ctx.font = `14px ${FONT}`; ctx.textAlign = 'left'; ctx.fillStyle = '#ff922b'; ctx.fillText('🔥', 8, 50);
-  for (let k = 0; k < KI_MAX / KI; k++) {
-    const r = clamp((G.ki - k * KI) / KI, 0, 1), x = 30 + k * 22;
-    ctx.fillStyle = '#495057'; ctx.fillRect(x, 36, 18, 18);
-    ctx.fillStyle = r >= 1 ? (Math.floor(frame / 15) % 2 ? '#ffd43b' : '#ff922b') : '#ffa94d'; ctx.fillRect(x + 2, 52 - 14 * r, 14, 14 * r);
-  }
+  if (best) { ctx.fillStyle = '#ffd43b'; ctx.fillText(`BEST ${fmt(best)}`, gx + 156, 20); }
+  drawStatusBox(D);
   let pk = 0;
   for (const k of ITEM_KEYS) if (G.pow[k] > 0) {     // つかっているアイテムと残り時間
     const sp = ITEM_SPR[k], x = VW - 46 - pk * 44; pk++;
@@ -3332,9 +3468,10 @@ function drawHUD() {
   }
   const b = L.boss;
   if (b && b.started && !b.dead) {
-    ctx.fillStyle = 'rgba(16,16,36,.85)'; ctx.fillRect(VW / 2 - 170, 34, 340, 24); ctx.fillStyle = '#fff'; ctx.fillRect(VW / 2 - 170, 56, 340, 2);
-    ctx.font = `14px ${FONT}`; ctx.textAlign = 'left'; ctx.fillStyle = '#ffc9c9'; ctx.fillText(BOSSES[b.type].name, VW / 2 - 162, 51);
-    for (let k = 0; k < b.maxHp; k++) { ctx.fillStyle = k < b.hp ? '#ff6b6b' : '#495057'; ctx.fillRect(VW / 2 + 162 - (b.maxHp - k) * 18, 39, 14, 14); }
+    const bx = 214;   // ボスの体力バー（左上のステータスまどと重ならない位置）
+    ctx.fillStyle = 'rgba(16,16,36,.85)'; ctx.fillRect(bx, 34, 340, 24); ctx.fillStyle = '#fff'; ctx.fillRect(bx, 56, 340, 2);
+    ctx.font = `14px ${FONT}`; ctx.textAlign = 'left'; ctx.fillStyle = '#ffc9c9'; ctx.fillText(BOSSES[b.type].name, bx + 8, 51);
+    for (let k = 0; k < b.maxHp; k++) { ctx.fillStyle = k < b.hp ? '#ff6b6b' : '#495057'; ctx.fillRect(bx + 332 - (b.maxHp - k) * 18, 39, 14, 14); }
   }
 }
 
